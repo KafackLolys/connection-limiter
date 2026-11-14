@@ -10,19 +10,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { QuotaSettings } from "../../features/quota/quota.types";
+import { getQuotas, saveQuotas } from "../../services/storage.service";
 
-type Quota = {
-  id: string;
-  name: string;
-  limitMB: number;
-  period: "daily" | "weekly" | "monthly";
-  action: "alert" | "block";
-  enabled: boolean;
-  alertThresholds: number[];
-};
-
-const STORAGE_KEY = "@connection_limiter/quotas";
+type Quota = QuotaSettings;
 
 const COLORS = {
   background: "#F5F7FB",
@@ -59,10 +50,8 @@ export default function QuotasScreen() {
 
   async function loadQuotas() {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setQuotas(JSON.parse(stored));
-      }
+      const stored = await getQuotas();
+      setQuotas(Array.isArray(stored) ? stored : []);
     } catch {
       Alert.alert("Erreur", "Impossible de charger les quotas.");
     } finally {
@@ -72,13 +61,12 @@ export default function QuotasScreen() {
 
   async function persistQuotas(updated: Quota[]) {
     try {
-      await AsyncStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(updated)
-      );
+      await saveQuotas(updated);
       setQuotas(updated);
+      return true;
     } catch {
       Alert.alert("Erreur", "Impossible d'enregistrer les quotas.");
+      return false;
     }
   }
 
@@ -110,8 +98,11 @@ export default function QuotasScreen() {
       limitMB: Math.round(value * (unit === "GB" ? 1024 : 1)),
       period,
       action,
-      enabled: true,
-      alertThresholds: [50, 80, 100],
+      enabled: editingId
+        ? (quotas.find((item) => item.id === editingId)?.enabled ?? true)
+        : !quotas.some((item) => item.enabled),
+      alertThresholds:
+        quotas.find((item) => item.id === editingId)?.alertThresholds ?? [50, 80, 100],
     };
 
     const updated = editingId
@@ -120,8 +111,7 @@ export default function QuotasScreen() {
         )
       : [...quotas, quota];
 
-    await persistQuotas(updated);
-    resetForm();
+    if (await persistQuotas(updated)) resetForm();
   }
 
   function editQuota(quota: Quota) {
@@ -154,11 +144,12 @@ export default function QuotasScreen() {
   }
 
   async function toggleQuota(quota: Quota) {
-    const updated = quotas.map((item) =>
-      item.id === quota.id
-        ? { ...item, enabled: !item.enabled }
-        : item
-    );
+    const willEnable = !quota.enabled;
+    // Le tableau de bord et le compteur actuel suivent un quota actif unique.
+    const updated = quotas.map((item) => ({
+      ...item,
+      enabled: item.id === quota.id ? willEnable : willEnable ? false : item.enabled,
+    }));
     await persistQuotas(updated);
   }
 
@@ -318,7 +309,7 @@ export default function QuotasScreen() {
               </View>
 
               <Text style={styles.actionText}>
-                Action : {quota.action === "alert" ? "Alerte" : "Blocage demandé"}
+                Action : {quota.action === "alert" ? "Alerte" : "Blocage demandé (non disponible sans VPN)"}
               </Text>
 
               <View style={styles.actions}>
