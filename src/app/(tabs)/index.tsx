@@ -27,7 +27,7 @@ export default function DashboardScreen() {
     if (collecting.current) return;
     collecting.current = true;
     try {
-      const counters = getCellularCounters();
+      const counters = await getCellularCounters();
       if (!counters) {
         setCellularStatus("Module iOS absent · installez un build natif, pas Expo Go");
         return;
@@ -85,7 +85,7 @@ export default function DashboardScreen() {
 
       const beforePercent = usedBefore / activeQuota.limitMB * 100;
       const afterPercent = usedAfter / activeQuota.limitMB * 100;
-      for (const threshold of [50, 80, 100]) {
+      for (const threshold of activeQuota.alertThresholds ?? [50, 80, 100]) {
         if (beforePercent < threshold && afterPercent >= threshold) {
           await sendQuotaAlert(threshold, usedAfter, activeQuota.limitMB);
         }
@@ -130,7 +130,7 @@ export default function DashboardScreen() {
       const next: UsageEntry[] = [{ id: `${now.getTime()}`, quotaId: quota.id, consumedMB: addedMB, updatedAt: now.toISOString(), periodKey: key, source: "manual" }, ...entries];
       await saveUsage(next);
       setEntries(next); setAmount("");
-      for (const threshold of [50, 80, 100]) {
+      for (const threshold of quota.alertThresholds ?? [50, 80, 100]) {
         if (before < threshold && after >= threshold) await sendQuotaAlert(threshold, nextUsed, quota.limitMB);
       }
     } catch { Alert.alert("Erreur", "La consommation n’a pas pu être enregistrée."); }
