@@ -46,17 +46,19 @@ export default function DashboardScreen() {
       }
 
       const deltaBytes = totalBytes - previous.totalBytes;
-      await saveCellularBaseline({ totalBytes, updatedAt: now.toISOString() });
       if (deltaBytes < 1024) {
+        await saveCellularBaseline({ totalBytes, updatedAt: now.toISOString() });
         setCellularStatus("Comptage cellulaire actif · vérifié toutes les 30 s");
         return;
       }
 
       const activeQuota = (await getQuotas()).find((item) => item.enabled);
       if (!activeQuota) {
-        setCellularStatus("Compteur actif · créez un quota pour suivre les Mo");
+        // Keep the previous baseline so usage is not discarded before a quota is enabled.
+        setCellularStatus("Compteur prêt · activez un quota pour enregistrer les données");
         return;
       }
+      await saveCellularBaseline({ totalBytes, updatedAt: now.toISOString() });
 
       const allEntries = await getUsage();
       const periodKey = getPeriodKey(activeQuota.period, now);
